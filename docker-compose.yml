@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  engine-ecu:
+    build: .
+    container_name: engine_ecu
+    command: python ecu_simulators/engine_ecu.py --faults
+    network_mode: host
+    privileged: true
+
+  brake-ecu:
+    build: .
+    container_name: brake_ecu
+    command: python ecu_simulators/brake_ecu.py --faults
+    network_mode: host
+    privileged: true
+
+  speed-ecu:
+    build: .
+    container_name: speed_ecu
+    command: python ecu_simulators/speed_ecu.py --faults
+    network_mode: host
+    privileged: true
+
+  api:
+    build: .
+    container_name: digital_twin_api
+    ports:
+      - "8000:8000"
+    network_mode: host
+    privileged: true
+    depends_on:
+      - engine-ecu
+      - brake-ecu
+      - speed-ecu
+
+  dashboard:
+    build: .
+    container_name: digital_twin_dashboard
+    command: streamlit run dashboard/streamlit_app.py --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    network_mode: host
+    depends_on:
+      - api

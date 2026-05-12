@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.coverage
+
+# Virtual envs
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# ML artifacts
+ml_model/*.pkl
+data/*.csv
+
+# Logs
+*.log
+logs/
+
+# Build
+build/
+dist/
+*.o
+*.out
+
+# Docker
+.dockerignore
