@@ -155,6 +155,8 @@ Open `http://localhost:8501` to view the digital twin dashboard.
 
 ### Run my React/Vite website
 
+For a fuller walkthrough of the architecture, actual CAN byte layouts, backend and browser detector behavior, deployment, and known limitations, see [Project Documentation](docs/PROJECT_DOCUMENTATION.md).
+
 From the project root:
 
 ```bash
@@ -165,7 +167,7 @@ npm run dev
 
 Open the local address printed by Vite (usually `http://localhost:5173/`). Do not open `frontend/index.html` directly. For a static build, run `npm run build` from `frontend`; the output is `frontend/dist/`. That built folder can be served by Live Server or a static host.
 
-The website opens in **Simulated (browser)** mode and works without Linux or `vcan0`. It starts idle with no generated readings. Start begins with normal readings, then schedules one RPM spike on the project car after about 10 seconds of simulation time so the detector can produce a demo alert; pause, reset, or change the speed from 0.5× to 4×. Engine, brake, and speed values advance together, and the browser encodes CAN-style frames using the same IDs and byte layout as `canProtocol.js`. The live pipeline, CAN feed, vehicle readings, alerts, and score proxy all use that same browser simulation.
+The website opens in **Simulated (browser)** mode and works without Linux or `vcan0`. It starts idle with no generated readings. Start begins with normal readings, then schedules an RPM fault on the project car after about 10 seconds of simulation time so the detector can produce a demo alert; the injected RPM remains high until cleared. Pause, reset, or change the speed from 0.5× to 4×. Engine, brake, and speed values advance together, and the browser encodes CAN-style frames using the same IDs and byte layout as `canProtocol.js`. The live pipeline, CAN feed, vehicle readings, alerts, and score proxy all use that same browser simulation.
 
 The browser detector is labeled **simulated detector**: it uses the training ranges and the FastAPI diagnosis cutoffs as a rule-based approximation, not the trained Isolation Forest. The browser adds a ten-frame persistence rule for a stuck speed signal because the API's current diagnosis rules do not explicitly detect that fault. Optional natural glitches are off by default. No browser-generated values or scores are measured results. **Live backend** remains available separately; it reads the FastAPI service and pauses browser simulation.
 
