@@ -1,0 +1,25 @@
+:root {
+  color-scheme: dark;
+  font-family: 'Manrope', sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --ink: #111512;
+  --panel: #1a201b;
+  --panel-raised: #202720;
+  --paper: #e9e7dc;
+  --muted: #a0a69a;
+  --line: #394039;
+  --amber: #d7a84c;
+  --red: #df6755;
+  --green: #a6bd91;
+  --mono: 'IBM Plex Mono', monospace;
+  --display: 'Barlow Condensed', sans-serif;
+  --content: 1180px;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--ink); color: var(--paper); }
+button, select { font: inherit; }
+button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid var(--amber); outline-offset: 4px; }
+::selection { color: var(--ink); background: var(--amber); }

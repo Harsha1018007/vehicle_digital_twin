@@ -18,8 +18,8 @@ import numpy as np
 import struct
 import threading
 import time
-from collections import deque, defaultdict
-from datetime import datetime
+from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -49,9 +49,16 @@ class VehicleState:
         self.brake = {'brake_pressure': 0, 'abs_status': 0, 'pedal_position': 0}
         self.speed = {'speed': 0, 'wheel_fl': 0, 'wheel_fr': 0}
         self.last_update = None
+        self.ecu_last_update = {'engine': None, 'brake': None, 'speed': None}
         self.anomalies = deque(maxlen=50)
         self.total_messages = 0
         self.total_anomalies = 0
+        self.listener_status = 'starting'
+        self.bus_connected = False
+        self.model_loaded = False
+        self.bus_error = None
+        self.model_error = None
+        self.listener_error = None
         self.lock = threading.Lock()
 
 
@@ -65,6 +72,7 @@ class StateResponse(BaseModel):
     brake: dict
     speed: dict
     last_update: str | None
+    ecu_last_update: dict
     total_messages: int
     total_anomalies: int
 
@@ -101,18 +109,31 @@ def can_listener_thread(model_path: str, scaler_path: str):
         model = joblib.load(model_path)
         scaler = joblib.load(scaler_path)
         has_model = True
-    except Exception as e:
-        print(f"[API] Model not available: {e}")
+        with vehicle.lock:
+            vehicle.model_loaded = True
+            vehicle.model_error = None
+    except Exception as error:
+        print(f"[API] Model not available: {error}")
         has_model = False
+        with vehicle.lock:
+            vehicle.model_loaded = False
+            vehicle.model_error = str(error)
 
     try:
         bus = can.interface.Bus(channel='vcan0', bustype='socketcan')
-    except Exception:
-        try:
-            bus = can.interface.Bus(bustype='virtual', channel='vcan0')
-        except Exception as e:
-            print(f"[API] CAN bus unavailable: {e}")
-            return
+    except Exception as error:
+        message = str(error)
+        print(f"[API] CAN bus unavailable: {message}")
+        with vehicle.lock:
+            vehicle.bus_connected = False
+            vehicle.listener_status = 'bus_unavailable'
+            vehicle.bus_error = message
+        return
+
+    with vehicle.lock:
+        vehicle.bus_connected = True
+        vehicle.listener_status = 'listening'
+        vehicle.bus_error = None
 
     print("[API] CAN listener thread started")
 
@@ -124,7 +145,9 @@ def can_listener_thread(model_path: str, scaler_path: str):
 
             with vehicle.lock:
                 vehicle.total_messages += 1
-                vehicle.last_update = datetime.utcnow().isoformat()
+                now = datetime.now(timezone.utc).isoformat()
+                vehicle.last_update = now
+                vehicle.listener_error = None
 
                 if msg.arbitration_id == 0x100:
                     rpm, temp_x10, throttle = struct.unpack('>HHB', msg.data[:5])
@@ -133,6 +156,7 @@ def can_listener_thread(model_path: str, scaler_path: str):
                         'coolant_temp': temp_x10 / 10.0,
                         'throttle': throttle
                     }
+                    vehicle.ecu_last_update['engine'] = now
                 elif msg.arbitration_id == 0x200:
                     pressure_x10, abs_st, pedal = struct.unpack('>HBB', msg.data[:4])
                     vehicle.brake = {
@@ -140,6 +164,7 @@ def can_listener_thread(model_path: str, scaler_path: str):
                         'abs_status': abs_st,
                         'pedal_position': pedal
                     }
+                    vehicle.ecu_last_update['brake'] = now
                 elif msg.arbitration_id == 0x300:
                     speed_x10, fl_x10, fr_x10 = struct.unpack('>HHH', msg.data[:6])
                     vehicle.speed = {
@@ -147,9 +172,11 @@ def can_listener_thread(model_path: str, scaler_path: str):
                         'wheel_fl': fl_x10 / 10.0,
                         'wheel_fr': fr_x10 / 10.0
                     }
+                    vehicle.ecu_last_update['speed'] = now
 
-                # Run anomaly detection on combined state
-                if has_model:
+                # Wait for one decoded message from every ECU before scoring
+                # the combined vector; zero-filled startup values are not data.
+                if has_model and all(vehicle.ecu_last_update.values()):
                     feature_vec = np.array([[
                         vehicle.engine['rpm'],
                         vehicle.engine['coolant_temp'],
@@ -174,13 +201,15 @@ def can_listener_thread(model_path: str, scaler_path: str):
                         diagnosis = diagnose_fault(state_snapshot)
                         vehicle.total_anomalies += 1
                         vehicle.anomalies.appendleft({
-                            'timestamp': datetime.utcnow().isoformat(),
+                            'timestamp': now,
                             'diagnosis': diagnosis,
                             'score': score,
                             'state_snapshot': state_snapshot
                         })
-        except Exception as e:
-            print(f"[API] Listener error: {e}")
+        except Exception as error:
+            print(f"[API] Listener error: {error}")
+            with vehicle.lock:
+                vehicle.listener_error = str(error)
             time.sleep(0.5)
 
 
@@ -189,9 +218,10 @@ def can_listener_thread(model_path: str, scaler_path: str):
 @app.on_event("startup")
 def startup_event():
     """Start CAN listener thread when API starts."""
+    project_root = Path(__file__).resolve().parent.parent
     thread = threading.Thread(
         target=can_listener_thread,
-        args=('ml_model/model.pkl', 'ml_model/scaler.pkl'),
+        args=(str(project_root / 'ml_model' / 'model.pkl'), str(project_root / 'ml_model' / 'scaler.pkl')),
         daemon=True
     )
     thread.start()
@@ -208,11 +238,20 @@ def root():
 
 @app.get("/health")
 def health():
-    return {
-        "status": "healthy",
-        "last_update": vehicle.last_update,
-        "messages_received": vehicle.total_messages
-    }
+    with vehicle.lock:
+        return {
+            "status": "healthy",
+            "listener_status": vehicle.listener_status,
+            "bus_connected": vehicle.bus_connected,
+            "model_loaded": vehicle.model_loaded,
+            "detection_ready": vehicle.model_loaded and all(vehicle.ecu_last_update.values()),
+            "bus_error": vehicle.bus_error,
+            "model_error": vehicle.model_error,
+            "listener_error": vehicle.listener_error,
+            "last_update": vehicle.last_update,
+            "messages_received": vehicle.total_messages,
+            "anomalies_detected": vehicle.total_anomalies
+        }
 
 
 @app.get("/state", response_model=StateResponse)
@@ -224,6 +263,7 @@ def get_state():
             brake=dict(vehicle.brake),
             speed=dict(vehicle.speed),
             last_update=vehicle.last_update,
+            ecu_last_update=dict(vehicle.ecu_last_update),
             total_messages=vehicle.total_messages,
             total_anomalies=vehicle.total_anomalies
         )
@@ -251,6 +291,9 @@ async def websocket_stream(websocket: WebSocket):
                     'brake': dict(vehicle.brake),
                     'speed': dict(vehicle.speed),
                     'last_update': vehicle.last_update,
+                    'ecu_last_update': dict(vehicle.ecu_last_update),
+                    'total_messages': vehicle.total_messages,
+                    'model_loaded': vehicle.model_loaded,
                     'anomaly_count': vehicle.total_anomalies
                 }
             await websocket.send_json(payload)

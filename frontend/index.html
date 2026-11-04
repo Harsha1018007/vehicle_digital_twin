@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111512" />
+    <meta name="description" content="A visual walkthrough of a student-built CAN bus vehicle digital twin." />
+    <title>CAN field notes — Vehicle digital twin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="app-startup-fallback" role="status" aria-live="polite">
+      <div class="startup-card">
+        <p class="startup-kicker">CAN / FIELD NOTES</p>
+        <h1>Starting the explainer…</h1>
+        <p>If this stays here, start Vite from the <code>frontend</code> folder and open the local address it prints.</p>
+      </div>
+    </div>
+    <style>
+      #app-startup-fallback { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 24px; color: #e9e7dc; background: #111512; font-family: 'IBM Plex Mono', monospace; }
+      #app-startup-fallback[hidden] { display: none; }
+      .startup-card { width: min(100%, 520px); padding: 32px; border: 1px solid #394039; }
+      .startup-kicker { color: #d7a84c; font-size: 10px; letter-spacing: .1em; }
+      .startup-card h1 { margin: 26px 0 12px; font: 600 38px 'Barlow Condensed', sans-serif; text-transform: uppercase; }
+      .startup-card p { color: #a0a69a; font-size: 12px; line-height: 1.8; }
+      .startup-card code { color: #d7a84c; }
+    </style>
+    <script>
+      window.addEventListener('error', () => {
+        const fallback = document.getElementById('app-startup-fallback')
+        if (fallback) fallback.innerHTML = '<div class="startup-card"><p class="startup-kicker">CAN / FIELD NOTES</p><h1>The page did not start.</h1><p>Open the project from the frontend Vite server. In the terminal, run <code>npm run dev</code> inside the frontend folder and open the address it prints.</p></div>'
+      })
+      window.addEventListener('unhandledrejection', () => {
+        const fallback = document.getElementById('app-startup-fallback')
+        if (fallback) fallback.innerHTML = '<div class="startup-card"><p class="startup-kicker">CAN / FIELD NOTES</p><h1>The page did not start.</h1><p>Refresh the Vite page. If it stays blank, check the terminal for the first error and send it to me.</p></div>'
+      })
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
